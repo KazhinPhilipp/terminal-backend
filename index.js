@@ -106,7 +106,7 @@ function scanToBase64(options = {}) {
             resolution = 300,
             mode = 'Color',
             format = 'jpeg',
-            device = 'airscan:wl:HP LaserJet Pro MFP M225rdn (13FC45)',
+            device = 'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)',
             progressCallback = null,
         } = options;
 
