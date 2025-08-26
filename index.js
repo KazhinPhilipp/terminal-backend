@@ -83,40 +83,29 @@ app.get('/GetRegulaImages', (req, res) => {
 });
 
 app.get('/GetScannerImage', (req, res) => {
-    // Connect to the SANE server
-    const context = sane.create();
+    const scan = spawn('scanimage', [
+        '-d "airscan:wl:HP LaserJet Pro MFP M225rdn (13FC45)"',
+        '--format=jpeg',
+        '--resolution=300',
+        '--mode=Color',
+        '--progress',
+    ]);
 
-    // Get a list of available scanners
-    const devices = context.getDevices();
+    const writeStream = fs.createWriteStream(outputPath);
 
-    if (devices.length === 0) {
-        console.log('No scanners available.');
-        return;
-    }
+    scan.stdout.pipe(writeStream);
 
-    console.log(devices);
-    return;
+    scan.stderr.on('data', (data) => {
+        console.log('Прогресс:', data.toString());
+    });
 
-    // Use the first scanner in the list
-    const scanner = devices[0];
+    scan.on('close', (code) => {
+        if (code === 0) {
+            resolve(outputPath);
+        } else {
+            reject(new Error(`Сканирование завершилось с кодом ${code}`));
+        }
+    });
 
-    // Open the scanner
-    const handle = context.open(scanner);
-
-    // Set some options for the scanner
-    handle.setOption('mode', 'Color');
-    handle.setOption('resolution', 300);
-    handle.setOption('format', 'jpeg');
-    handle.setOption('device-name', 'genesys:libusb:001:040');
-
-    // Scan the image
-    const image = handle.start();
-    const imageData = image.read();
-
-    // Save the image to a file
-    const fs = require('fs');
-    fs.writeFileSync(`scan-${Date.now()}.jpg`, imageData);
-
-    // Close the scanner
-    handle.cancel();
+    scan.on('error', reject);
 });
