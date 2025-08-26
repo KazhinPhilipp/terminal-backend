@@ -103,7 +103,7 @@ function scanToBase64(options = {}) {
     return new Promise((resolve, reject) => {
         // Параметры по умолчанию
         const {
-            resolution = 300,
+            resolution = 75,
             mode = 'Color',
             format = 'jpeg',
             device = 'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)',
