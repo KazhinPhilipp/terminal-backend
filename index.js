@@ -83,30 +83,100 @@ app.get('/GetRegulaImages', (req, res) => {
     socket.emit('GetImages', debugCb);
 });
 
-app.get('/GetScannerImage', (req, res) => {
-    const scan = spawn('scanimage', [
-        '-d "airscan:wl:HP LaserJet Pro MFP M225rdn (13FC45)"',
-        '--format=jpeg',
-        '--resolution=300',
-        '--mode=Color',
-        '--progress',
-    ]);
+app.get('/scan-document', async (req, res) => {
+    try {
+        const result = await scanToBase64(req.body);
 
-    const writeStream = fs.createWriteStream(outputPath);
-
-    scan.stdout.pipe(writeStream);
-
-    scan.stderr.on('data', (data) => {
-        console.log('Прогресс:', data.toString());
-    });
-
-    scan.on('close', (code) => {
-        if (code === 0) {
-            resolve(outputPath);
-        } else {
-            reject(new Error(`Сканирование завершилось с кодом ${code}`));
-        }
-    });
-
-    scan.on('error', reject);
+        // Можно добавить дополнительную обработку
+        res.setHeader('Content-Type', 'application/json');
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+        });
+    }
 });
+
+// Сканирование с получением base64
+function scanToBase64(options = {}) {
+    return new Promise((resolve, reject) => {
+        // Параметры по умолчанию
+        const {
+            resolution = 300,
+            mode = 'Color',
+            format = 'jpeg',
+            device = 'airscan:wl:HP LaserJet Pro MFP M225rdn (13FC45)',
+            progressCallback = null,
+        } = options;
+
+        // Формируем аргументы для scanimage
+        const args = [
+            `--format=${format}`,
+            `--resolution=${resolution}`,
+            `--mode=${mode}`,
+            '--progress', // Включаем вывод прогресса
+        ];
+
+        // Добавляем устройство, если указано
+        if (device) {
+            args.push(`--device-name=${device}`);
+        }
+
+        console.log('Запуск сканирования с параметрами:', args);
+
+        // Запускаем процесс сканирования
+        const scan = spawn('scanimage', args);
+
+        let imageBuffer = Buffer.alloc(0);
+        let errorOutput = '';
+
+        // Собираем данные изображения из stdout
+        scan.stdout.on('data', (chunk) => {
+            imageBuffer = Buffer.concat([imageBuffer, chunk]);
+        });
+
+        // Обрабатываем stderr (прогресс и ошибки)
+        scan.stderr.on('data', (data) => {
+            const output = data.toString();
+            errorOutput += output;
+
+            // Парсим прогресс
+            const progressMatch = output.match(/(\d+\.?\d*)%/);
+            if (progressMatch && progressCallback) {
+                const progress = parseFloat(progressMatch[1]);
+                progressCallback(progress);
+            }
+
+            // Выводим отладочную информацию
+            console.log('SANE:', output.trim());
+        });
+
+        // Обрабатываем завершение процесса
+        scan.on('close', (code) => {
+            if (code === 0) {
+                if (imageBuffer.length > 0) {
+                    // Конвертируем в base64
+                    const base64Image = imageBuffer.toString('base64');
+
+                    resolve({
+                        success: true,
+                        image: base64Image,
+                        format: `image/${format}`,
+                        size: imageBuffer.length,
+                        mimeType: `image/${format}`,
+                    });
+                } else {
+                    reject(new Error('Нет данных изображения'));
+                }
+            } else {
+                reject(new Error(`Сканирование завершилось с ошибкой (код ${code}): ${errorOutput}`));
+            }
+        });
+
+        // Обрабатываем ошибки запуска процесса
+        scan.on('error', (error) => {
+            reject(new Error(`Ошибка запуска scanimage: ${error.message}`));
+        });
+    });
+}
