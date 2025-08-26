@@ -3,7 +3,7 @@ const { exec, spawn } = require('child_process');
 const http = require('http');
 const io = require('socket.io-client');
 const { XMLParser } = require('fast-xml-parser');
-const sane = require('sane');
+const fs = require('fs');
 
 const url = 'http://localhost:3000/';
 // new parser instance
