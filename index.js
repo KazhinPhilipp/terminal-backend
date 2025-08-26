@@ -100,83 +100,97 @@ app.get('/scan-document', async (req, res) => {
 
 // Сканирование с получением base64
 function scanToBase64(options = {}) {
-    return new Promise((resolve, reject) => {
-        // Параметры по умолчанию
+    return new Promise(async (resolve, reject) => {
         const {
             resolution = 75,
             mode = 'Color',
             format = 'jpeg',
-            device = 'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)',
+            device = null,
             progressCallback = null,
+            timeout = 30000, // 30 секунд таймаут
         } = options;
 
-        // Формируем аргументы для scanimage
-        const args = [
-            `--format=${format}`,
-            `--resolution=${resolution}`,
-            `--mode=${mode}`,
-            '--progress', // Включаем вывод прогресса
-        ];
+        try {
+            // Автоматическое определение устройства, если не указано
+            let targetDevice = device || 'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)';
 
-        // Добавляем устройство, если указано
-        if (device) {
-            args.push(`--device-name=${device}`);
-        }
+            const args = [`--format=${format}`, `--resolution=${resolution}`, `--mode=${mode}`, '--progress'];
 
-        console.log('Запуск сканирования с параметрами:', args);
-
-        // Запускаем процесс сканирования
-        const scan = spawn('scanimage', args);
-
-        let imageBuffer = Buffer.alloc(0);
-        let errorOutput = '';
-
-        // Собираем данные изображения из stdout
-        scan.stdout.on('data', (chunk) => {
-            imageBuffer = Buffer.concat([imageBuffer, chunk]);
-        });
-
-        // Обрабатываем stderr (прогресс и ошибки)
-        scan.stderr.on('data', (data) => {
-            const output = data.toString();
-            errorOutput += output;
-
-            // Парсим прогресс
-            const progressMatch = output.match(/(\d+\.?\d*)%/);
-            if (progressMatch && progressCallback) {
-                const progress = parseFloat(progressMatch[1]);
-                progressCallback(progress);
+            if (targetDevice) {
+                args.push(`--device-name=${targetDevice}`);
             }
 
-            // Выводим отладочную информацию
-            console.log('SANE:', output.trim());
-        });
+            console.log('Запуск сканирования с параметрами:', args);
 
-        // Обрабатываем завершение процесса
-        scan.on('close', (code) => {
-            if (code === 0) {
-                if (imageBuffer.length > 0) {
-                    // Конвертируем в base64
-                    const base64Image = imageBuffer.toString('base64');
+            const scan = spawn('scanimage', args);
+            let imageBuffer = Buffer.alloc(0);
+            let errorOutput = '';
+            let isCompleted = false;
 
-                    resolve({
-                        success: true,
-                        image: base64Image,
-                        format: `image/${format}`,
-                        size: imageBuffer.length,
-                        mimeType: `image/${format}`,
-                    });
-                } else {
-                    reject(new Error('Нет данных изображения'));
+            // Таймаут для сканирования
+            const timeoutId = setTimeout(() => {
+                if (!isCompleted) {
+                    scan.kill('SIGTERM');
+                    reject(new Error('Таймаут сканирования'));
                 }
-            } else {
-                reject(new Error(`Сканирование завершилось с ошибкой (код ${code}): ${errorOutput}`));
-            }
-        });
+            }, timeout);
 
-        // Обрабатываем ошибки запуска процесса
-        scan.on('error', (error) => {
-            reject(new Error(`Ошибка запуска scanimage: ${error.message}`));
-        });
+            scan.stdout.on('data', (chunk) => {
+                imageBuffer = Buffer.concat([imageBuffer, chunk]);
+            });
+
+            scan.stderr.on('data', (data) => {
+                const output = data.toString();
+                errorOutput += output;
+
+                const progressMatch = output.match(/(\d+\.?\d*)%/);
+                if (progressMatch && progressCallback) {
+                    const progress = parseFloat(progressMatch[1]);
+                    progressCallback(progress);
+                }
+
+                console.log('SANE:', output.trim());
+            });
+
+            scan.on('close', (code) => {
+                clearTimeout(timeoutId);
+                isCompleted = true;
+
+                if (code === 0) {
+                    if (imageBuffer.length > 0) {
+                        const base64Image = imageBuffer.toString('base64');
+                        resolve({
+                            success: true,
+                            image: base64Image,
+                            format: `image/${format}`,
+                            size: imageBuffer.length,
+                            mimeType: `image/${format}`,
+                        });
+                    } else {
+                        reject(new Error('Нет данных изображения'));
+                    }
+                } else {
+                    // Более детальный анализ ошибки
+                    let errorMessage = `Код ошибки: ${code}`;
+
+                    if (errorOutput.includes('Invalid argument')) {
+                        errorMessage = 'Неверные параметры устройства или сканирования';
+                    } else if (errorOutput.includes('Device busy')) {
+                        errorMessage = 'Устройство занято';
+                    } else if (errorOutput.includes('No device available')) {
+                        errorMessage = 'Устройство недоступно';
+                    }
+
+                    reject(new Error(`Сканирование не удалось: ${errorMessage}. Детали: ${errorOutput}`));
+                }
+            });
+
+            scan.on('error', (error) => {
+                clearTimeout(timeoutId);
+                reject(new Error(`Ошибка запуска scanimage: ${error.message}`));
+            });
+        } catch (error) {
+            reject(error);
+        }
     });
 }
