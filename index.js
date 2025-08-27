@@ -105,17 +105,24 @@ function scanToBase64(options = {}) {
             resolution = 75,
             mode = 'Color',
             format = 'jpeg',
-            device = null,
+            device = [],
             progressCallback = null,
             timeout = 30000, // 30 секунд таймаут
         } = options;
 
         try {
-            // Автоматическое определение устройства, если не указано
-            let targetDevice = device || 'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)';
-            const devices = await getScannerDevices();
-            devices?.forEach((d) => {
-                console.log(d.match(/device `([^']+)'/));
+            let deviceIds = device || [
+                'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)',
+                'airscan:w2:HP LaserJet Pro MFP M225rdn (13FC45)',
+                'airscan:w3:HP LaserJet Pro MFP M225rdn (13FC45)',
+                'airscan:w4:HP LaserJet Pro MFP M225rdn (13FC45)',
+            ];
+            const existsDevices = await getScannerDevices();
+            let targetDevice = '';
+            deviceIds.forEach((d) => {
+                if (existsDevices.includes(d)) {
+                    targetDevice = d;
+                }
             });
 
             const args = [`--format=${format}`, `--resolution=${resolution}`, `--mode=${mode}`, '--progress'];
@@ -202,10 +209,10 @@ function scanToBase64(options = {}) {
 function getScannerDevices() {
     return new Promise((resolve, reject) => {
         const scan = spawn('scanimage', ['-L']);
-        let output = [];
+        let output = '';
 
-        scan.stdout.on('data', (data) => output.push(data.toString()));
-        scan.stderr.on('data', (data) => output.push(data.toString()));
+        scan.stdout.on('data', (data) => (output += data.toString()));
+        scan.stderr.on('data', (data) => (output += data.toString()));
 
         scan.on('close', (code) => {
             if (code === 0) {
