@@ -99,7 +99,7 @@ app.get('/scan-regula', (req, res) => {
                 cleanup();
                 if (data != null) {
                     const jsonContent = JSON.stringify({
-                        obj: Buffer.from(data.result, 'binary').toString('base64'),
+                        image: Buffer.from(data.result, 'binary').toString('base64'),
                     });
                     res.end(jsonContent);
                 } else {
