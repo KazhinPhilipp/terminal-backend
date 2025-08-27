@@ -70,6 +70,7 @@ app.get('/scan-regula', (req, res) => {
             responseSent = true;
             socket.off('OnProcessingFinished');
             res.status(500).json({
+                success: false,
                 error: 'Timeout: No response received within 60 seconds',
             });
         }
@@ -99,11 +100,12 @@ app.get('/scan-regula', (req, res) => {
                 cleanup();
                 if (data != null) {
                     const jsonContent = JSON.stringify({
+                        success: true,
                         image: Buffer.from(data.result, 'binary').toString('base64'),
                     });
                     res.end(jsonContent);
                 } else {
-                    res.status(500).json({ error: 'No data received' });
+                    res.status(500).json({ success: false, error: 'No data received' });
                 }
             });
         });
