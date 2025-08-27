@@ -51,14 +51,14 @@ app.get('/', (req, res) => {
 });
 
 // Получаем сокет от сканеру Regula
-/* let socket = io(url, {
+let socket = io(url, {
     transports: ['websocket'],
 });
 
 // Подключаемся к сканеру, получаем socket.id
 socket.on('connect', () => {
     console.log('socket id: ', socket.id);
-}); */
+});
 
 //Метод получения изображения
 app.get('/GetRegulaImages', (req, res) => {
