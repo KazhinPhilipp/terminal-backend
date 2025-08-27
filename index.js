@@ -124,7 +124,7 @@ function scanToBase64(options = {}) {
                     targetDevice = d;
                 }
             });
-
+            console.log('targetDevice', targetDevice);
             const args = [`--format=${format}`, `--resolution=${resolution}`, `--mode=${mode}`, '--progress'];
 
             if (targetDevice) {
