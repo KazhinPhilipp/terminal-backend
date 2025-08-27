@@ -63,25 +63,52 @@ socket.on('connect', () => {
 //Метод получения изображения
 app.get('/scan-regula', (req, res) => {
     console.log('start scan-regula');
+
+    let responseSent = false;
+    const timeout = setTimeout(() => {
+        if (!responseSent) {
+            responseSent = true;
+            socket.off('OnProcessingFinished');
+            res.status(500).json({
+                error: 'Timeout: No response received within 60 seconds',
+            });
+        }
+    }, 60000);
+
+    const cleanup = () => {
+        clearTimeout(timeout);
+        responseSent = true;
+    };
+
     socket.once('OnProcessingFinished', (result) => {
+        if (responseSent) return;
+
         socket.emit('IsReaderResultTypeAvailable', eRPRM_ResultType.RPRM_ResultType_RawImage, (count) => {
+            if (responseSent) return;
+
             console.log(`scan-regula count: ${count}`);
             if (count <= 0) {
-                res.send(404);
+                cleanup();
+                res.sendStatus(404);
+                return;
             }
+
             socket.emit('GetReaderFileImage', 1, (data) => {
+                if (responseSent) return;
+
+                cleanup();
                 if (data != null) {
-                    // console.log(Buffer.from(data.result).toString('base64'));
-                    // obj.img.push(Buffer.from(data.result).toString('base64'));
-                    const jsonContent = JSON.stringify({ obj: Buffer.from(data.result, 'binary').toString('base64') });
+                    const jsonContent = JSON.stringify({
+                        obj: Buffer.from(data.result, 'binary').toString('base64'),
+                    });
                     res.end(jsonContent);
-                    //    res.end(data.result, 'binary');
+                } else {
+                    res.status(500).json({ error: 'No data received' });
                 }
             });
-            // countObj  = count.result;
-            // intervalId = setInterval(repeatFunction, 1000);
         });
     });
+
     socket.emit('GetImages', debugCb);
 });
 
