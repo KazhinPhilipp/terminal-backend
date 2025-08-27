@@ -116,7 +116,7 @@ function scanToBase64(options = {}) {
             const devices = await getScannerDevices();
             console.log('devices', devices);
             devices?.forEach((d) => {
-                console.log(d);
+                console.log(d.match(/device `([^']+)'/));
             });
 
             const args = [`--format=${format}`, `--resolution=${resolution}`, `--mode=${mode}`, '--progress'];
