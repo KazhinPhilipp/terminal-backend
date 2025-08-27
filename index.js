@@ -113,6 +113,10 @@ function scanToBase64(options = {}) {
         try {
             // Автоматическое определение устройства, если не указано
             let targetDevice = device || 'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)';
+            const devices = await getScannerDevices();
+            devices.forEach((d) => {
+                console.log(d);
+            });
 
             const args = [`--format=${format}`, `--resolution=${resolution}`, `--mode=${mode}`, '--progress'];
 
@@ -192,5 +196,25 @@ function scanToBase64(options = {}) {
         } catch (error) {
             reject(error);
         }
+    });
+}
+
+function getScannerDevices() {
+    return new Promise((resolve, reject) => {
+        const scan = spawn('scanimage', ['-L']);
+        let output = '';
+
+        scan.stdout.on('data', (data) => (output += data.toString()));
+        scan.stderr.on('data', (data) => (output += data.toString()));
+
+        scan.on('close', (code) => {
+            if (code === 0) {
+                resolve(output);
+            } else {
+                reject(new Error(`Ошибка получения устройств: ${output}`));
+            }
+        });
+
+        scan.on('error', reject);
     });
 }
