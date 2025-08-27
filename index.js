@@ -203,10 +203,10 @@ function scanToBase64(options = {}) {
 function getScannerDevices() {
     return new Promise((resolve, reject) => {
         const scan = spawn('scanimage', ['-L']);
-        let output = '';
+        let output = [];
 
-        scan.stdout.on('data', (data) => (output += data.toString()));
-        scan.stderr.on('data', (data) => (output += data.toString()));
+        scan.stdout.on('data', (data) => output.push(data.toString()));
+        scan.stderr.on('data', (data) => output.push(data.toString()));
 
         scan.on('close', (code) => {
             if (code === 0) {
