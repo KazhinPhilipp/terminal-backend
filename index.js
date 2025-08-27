@@ -114,6 +114,7 @@ function scanToBase64(options = {}) {
             // Автоматическое определение устройства, если не указано
             let targetDevice = device || 'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)';
             const devices = await getScannerDevices();
+            console.log('devices', devices);
             devices?.forEach((d) => {
                 console.log(d);
             });
