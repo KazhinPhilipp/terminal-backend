@@ -61,9 +61,11 @@ socket.on('connect', () => {
 });
 
 //Метод получения изображения
-app.get('/GetRegulaImages', (req, res) => {
+app.get('/scan-regula', (req, res) => {
+    console.log('start scan-regula');
     socket.once('OnProcessingFinished', (result) => {
         socket.emit('IsReaderResultTypeAvailable', eRPRM_ResultType.RPRM_ResultType_RawImage, (count) => {
+            console.log(`scan-regula count: ${count}`);
             if (count <= 0) {
                 res.send(404);
             }
