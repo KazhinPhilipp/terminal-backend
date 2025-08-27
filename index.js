@@ -111,12 +111,15 @@ function scanToBase64(options = {}) {
         } = options;
 
         try {
-            let deviceIds = device || [
-                'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)',
-                'airscan:w2:HP LaserJet Pro MFP M225rdn (13FC45)',
-                'airscan:w3:HP LaserJet Pro MFP M225rdn (13FC45)',
-                'airscan:w4:HP LaserJet Pro MFP M225rdn (13FC45)',
-            ];
+            let deviceIds =
+                device.length > 0
+                    ? device
+                    : [
+                          'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)',
+                          'airscan:w2:HP LaserJet Pro MFP M225rdn (13FC45)',
+                          'airscan:w3:HP LaserJet Pro MFP M225rdn (13FC45)',
+                          'airscan:w4:HP LaserJet Pro MFP M225rdn (13FC45)',
+                      ];
             const existsDevices = await getScannerDevices();
             let targetDevice = '';
             deviceIds.forEach((d) => {
