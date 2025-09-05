@@ -4,6 +4,7 @@ const http = require('http');
 const io = require('socket.io-client');
 const { XMLParser } = require('fast-xml-parser');
 const fs = require('fs');
+const NodeWebcam = require('node-webcam');
 
 const url = 'http://localhost:3000/';
 // new parser instance
@@ -87,7 +88,7 @@ app.get('/scan-regula', (req, res) => {
         socket.emit('IsReaderResultTypeAvailable', eRPRM_ResultType.RPRM_ResultType_RawImage, (count) => {
             if (responseSent) return;
 
-            console.log(`scan-regula count: ${count}`);
+            console.log(`Доступно изображений: ${count}`);
             if (count <= 0) {
                 cleanup();
                 res.sendStatus(404);
@@ -121,6 +122,54 @@ app.get('/scan-document', async (req, res) => {
         // Можно добавить дополнительную обработку
         res.setHeader('Content-Type', 'application/json');
         res.json(result);
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+        });
+    }
+});
+
+app.get('/scan-webcam', async (req, res) => {
+    try {
+        const result = null;
+        // Настройки камеры
+        const opts = {
+            width: 1280,
+            height: 720,
+            quality: 100,
+            delay: 0,
+            saveShots: true,
+            output: 'jpeg',
+            device: '/dev/video0',
+            callbackReturn: 'location',
+            verbose: false,
+        };
+
+        const Webcam = NodeWebcam.create(opts);
+
+        // Сделать снимок
+        Webcam.capture('snapshot', function (err, data) {
+            if (err) {
+                console.error('Ошибка:', err);
+                res.status(500).json({
+                    success: false,
+                    error: err,
+                });
+                return;
+            }
+
+            console.log('Снимок сохранен:', data);
+            // Можно добавить дополнительную обработку
+            res.setHeader('Content-Type', 'application/json');
+            res.json({
+                success: true,
+                image: data,
+                format: `image/${format}`,
+                size: data.length,
+                mimeType: `image/${format}`,
+            });
+        });
     } catch (error) {
         res.status(500).json({
             success: false,
