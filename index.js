@@ -4,11 +4,29 @@ const http = require('http');
 const io = require('socket.io-client');
 const { XMLParser } = require('fast-xml-parser');
 const fs = require('fs');
-const NodeWebcam = require('node-webcam');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
+const readFileAsync = promisify(fs.readFile);
+const unlinkAsync = promisify(fs.unlink);
+require('dotenv').config();
 
-const url = 'http://localhost:3000/';
+const socketRegulaUrl = process.env.REGULA_SOCKET_URL;
+const appPort = process.env.APP_PORT;
+const scanWebcamName = process.env.SCAN_WEBCAM_NAME;
+const scannerDeviceIds = process.env.SCANNER_DEVICE_IDS?.split(/,,/g) || [];
+const scannerDeviceResolution = process.env.SCANNER_DEVICE_RESOLUTION;
+
 // new parser instance
 const parser = new XMLParser();
+
+const winston = require('winston');
+
+// Configure logger
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
+    transports: [new winston.transports.Console(), new winston.transports.File({ filename: 'logs/app.log' })],
+});
 
 let jsonObj = {};
 
@@ -42,28 +60,29 @@ const app = express();
 const debugCb = (reply) => console.log(reply);
 
 // Запускаем сервер на порту 8000
-app.listen(8000, () => {
-    console.log('Сервер запущен на http://localhost:8000/');
+app.listen(appPort, () => {
+    logger.info(`Сервер запущен на http://localhost:${appPort}/`);
 });
 
-// Отправляем сокет на сканер Regula
-app.get('/', (req, res) => {
-    res.send(socket.id);
-});
+try {
+    if (socketRegulaUrl != null && socketRegulaUrl !== '') {
+        // Получаем сокет от сканеру Regula
+        let socket = io(socketRegulaUrl, {
+            transports: ['websocket'],
+        });
 
-// Получаем сокет от сканеру Regula
-let socket = io(url, {
-    transports: ['websocket'],
-});
-
-// Подключаемся к сканеру, получаем socket.id
-socket.on('connect', () => {
-    console.log('socket id: ', socket.id);
-});
+        // Подключаемся к сканеру, получаем socket.id
+        socket.on('connect', () => {
+            logger.info('socket id: ', socket.id);
+        });
+    }
+} catch (error) {
+    logger.info('socket regula: error', error);
+}
 
 //Метод получения изображения
 app.get('/scan-regula', (req, res) => {
-    console.log('start scan-regula');
+    logger.info('start scan-regula');
 
     let responseSent = false;
     const timeout = setTimeout(() => {
@@ -74,6 +93,7 @@ app.get('/scan-regula', (req, res) => {
                 success: false,
                 error: 'Timeout: No response received within 60 seconds',
             });
+            logger.info('timeout scan-regula');
         }
     }, 60000);
 
@@ -88,10 +108,11 @@ app.get('/scan-regula', (req, res) => {
         socket.emit('IsReaderResultTypeAvailable', eRPRM_ResultType.RPRM_ResultType_RawImage, (count) => {
             if (responseSent) return;
 
-            console.log(`Доступно изображений: ${count}`);
+            logger.info(`Доступно изображений: ${count}`);
             if (count <= 0) {
                 cleanup();
                 res.sendStatus(404);
+                logger.info(`scan-regula нет картинок`);
                 return;
             }
 
@@ -105,8 +126,10 @@ app.get('/scan-regula', (req, res) => {
                         image: Buffer.from(data.result, 'binary').toString('base64'),
                     });
                     res.end(jsonContent);
+                    logger.info(`scan-regula: ответ true`);
                 } else {
                     res.status(500).json({ success: false, error: 'No data received' });
+                    logger.info(`scan-regula ошибка в данных`);
                 }
             });
         });
@@ -116,73 +139,88 @@ app.get('/scan-regula', (req, res) => {
 });
 
 app.get('/scan-document', async (req, res) => {
+    logger.info('scan-document: start');
     try {
         const result = await scanToBase64(req.body);
 
         // Можно добавить дополнительную обработку
         res.setHeader('Content-Type', 'application/json');
         res.json(result);
+        logger.info('scan-document: finish');
     } catch (error) {
         res.status(500).json({
             success: false,
             error: error.message,
         });
+        logger.info('scan-document: error', error);
     }
 });
 
 app.get('/scan-webcam', async (req, res) => {
+    logger.info('scan-webcam: start');
     try {
-        const result = null;
-        // Настройки камеры
-        const opts = {
-            width: 1280,
-            height: 720,
-            quality: 100,
-            delay: 0,
-            saveShots: true,
-            output: 'jpeg',
-            device: '/dev/video0',
-            callbackReturn: 'location',
-            verbose: false,
-        };
-
-        const Webcam = NodeWebcam.create(opts);
-
-        // Сделать снимок
-        Webcam.capture('snapshot', function (err, data) {
-            if (err) {
-                console.error('Ошибка:', err);
+        const format = 'jpg';
+        captureScreenshotBase64()
+            .then((base64) => {
+                // Можно добавить дополнительную обработку
+                res.setHeader('Content-Type', 'application/json');
+                res.json({
+                    success: true,
+                    image: base64,
+                    format: `image/${format}`,
+                    size: base64.length,
+                    mimeType: `image/${format}`,
+                });
+                logger.info('scan-webcam: finish');
+            })
+            .catch((error) => {
                 res.status(500).json({
                     success: false,
-                    error: err,
+                    error: error.message,
                 });
-                return;
-            }
-
-            console.log('Снимок сохранен:', data);
-            // Можно добавить дополнительную обработку
-            res.setHeader('Content-Type', 'application/json');
-            res.json({
-                success: true,
-                image: data,
-                format: `image/${format}`,
-                size: data.length,
-                mimeType: `image/${format}`,
+                logger.info('scan-webcam captureScreenshotBase64: error', error);
             });
-        });
     } catch (error) {
         res.status(500).json({
             success: false,
             error: error.message,
         });
+        logger.info('scan-webcam: error', error);
     }
 });
 
+async function captureScreenshotBase64() {
+    logger.info('captureScreenshotBase64: start');
+    const tempFile = `screenshot_${Date.now()}.jpg`;
+
+    try {
+        // Захватываем скриншот
+        await execAsync(`ffmpeg -f avfoundation -framerate 30 -i "${scanWebcamName}" -frames:v 1 -q:v 2 ${tempFile}`);
+
+        // Читаем файл и конвертируем в base64
+        const imageBuffer = await readFileAsync(tempFile);
+        const base64Image = imageBuffer.toString('base64');
+
+        // Удаляем временный файл
+        await unlinkAsync(tempFile);
+
+        return `data:image/jpeg;base64,${base64Image}`;
+    } catch (error) {
+        // Удаляем временный файл в случае ошибки
+        if (fs.existsSync(tempFile)) {
+            await unlinkAsync(tempFile);
+        }
+        logger.info('captureScreenshotBase64: error', error);
+        throw error;
+    }
+}
+
 // Сканирование с получением base64
 function scanToBase64(options = {}) {
+    logger.info('scanToBase64: start');
     return new Promise(async (resolve, reject) => {
         const {
-            resolution = 75,
+            resolution = scannerDeviceResolution,
             mode = 'Color',
             format = 'jpeg',
             device = [],
@@ -191,15 +229,7 @@ function scanToBase64(options = {}) {
         } = options;
 
         try {
-            let deviceIds =
-                device.length > 0
-                    ? device
-                    : [
-                          'airscan:w1:HP LaserJet Pro MFP M225rdn (13FC45)',
-                          'airscan:w2:HP LaserJet Pro MFP M225rdn (13FC45)',
-                          'airscan:w3:HP LaserJet Pro MFP M225rdn (13FC45)',
-                          'airscan:w4:HP LaserJet Pro MFP M225rdn (13FC45)',
-                      ];
+            let deviceIds = device.length > 0 ? device : scannerDeviceIds;
             const existsDevices = await getScannerDevices();
             let targetDevice = '';
             deviceIds.forEach((d) => {
@@ -207,14 +237,14 @@ function scanToBase64(options = {}) {
                     targetDevice = d;
                 }
             });
-            console.log('targetDevice', targetDevice);
+            logger.info('targetDevice', targetDevice);
             const args = [`--format=${format}`, `--resolution=${resolution}`, `--mode=${mode}`, '--progress'];
 
             if (targetDevice) {
                 args.push(`--device-name=${targetDevice}`);
             }
 
-            console.log('Запуск сканирования с параметрами:', args);
+            logger.info('Запуск сканирования с параметрами:', args);
 
             const scan = spawn('scanimage', args);
             let imageBuffer = Buffer.alloc(0);
@@ -243,7 +273,7 @@ function scanToBase64(options = {}) {
                     progressCallback(progress);
                 }
 
-                console.log('SANE:', output.trim());
+                logger.info('SANE:', output.trim());
             });
 
             scan.on('close', (code) => {
@@ -290,6 +320,7 @@ function scanToBase64(options = {}) {
 }
 
 function getScannerDevices() {
+    logger.info('getScannerDevices: start');
     return new Promise((resolve, reject) => {
         const scan = spawn('scanimage', ['-L']);
         let output = '';
@@ -299,8 +330,10 @@ function getScannerDevices() {
 
         scan.on('close', (code) => {
             if (code === 0) {
+                logger.info(`getScannerDevices: устройство найдено ${output}`);
                 resolve(output);
             } else {
+                logger.info('getScannerDevices: error ошибка получения устройства');
                 reject(new Error(`Ошибка получения устройств: ${output}`));
             }
         });

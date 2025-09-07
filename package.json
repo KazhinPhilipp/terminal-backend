@@ -11,12 +11,14 @@
     "license": "ISC",
     "description": "",
     "dependencies": {
+        "dotenv": "^17.2.2",
         "express": "^5.1.0",
         "fast-xml-parser": "^5.2.3",
         "node-webcam": "^0.8.2",
         "nodemon": "^3.1.10",
         "sane": "^5.0.1",
-        "socket.io-client": "^2.3.0"
+        "socket.io-client": "^2.3.0",
+        "winston": "^3.17.0"
     },
     "packageManager": "yarn@4.9.3"
 }
