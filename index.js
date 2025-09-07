@@ -195,7 +195,7 @@ async function captureScreenshotBase64() {
 
     try {
         // Захватываем скриншот
-        await execAsync(`ffmpeg -f avfoundation -framerate 30 -i "${scanWebcamName}" -frames:v 1 -q:v 2 ${tempFile}`);
+        await execAsync(`ffmpeg -f v4l2 -framerate 30 -i "${scanWebcamName}" -frames:v 1 -q:v 2 ${tempFile}`);
 
         // Читаем файл и конвертируем в base64
         const imageBuffer = await readFileAsync(tempFile);
